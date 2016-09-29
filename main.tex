@@ -105,35 +105,295 @@
 \vspace{1 cm}
 \end{frame}
 
-\begin{frame}{How to make that happen}
+\begin{frame}{Ways to get the data}
 \vspace{0.25 cm}
 \small
-\begin{description}
-\item[Parallel scripts (current):] run many jobs on the GRID, each pulls data over the network, analyzes every event, and filters, computes quantities of interest.
+\begin{description}\setlength{\itemsep}{0.2 cm}
+\item[Parallel scripts (current):] run many tasks on the GRID, each pulls data over the network, analyzes every event; filters, computes quantities of interest.
 
 \item[Relational database:]<2-> use pre-computed indexes over event data to avoid looking at every event in every query.
 
-\vspace{0.2 cm}
+\vspace{0.1 cm}
 But\ldots\ how to index over nested structures? Normal form requires expensive joins.
 
-\vspace{0.2 cm}
+\vspace{0.1 cm}
 Something like this was tried in the 90's with Objectivity (BaBar, CLEO, maybe others): considered a failure.
 
-\item[NoSQL databases:]<3-> many different types, but most would require expensive map-reduce jobs instead of joins.
+\item[NoSQL databases:]<3-> many different types, but most would require even move expensive map-reduce jobs instead of joins.
 
 \item[GPU database:]<4-> use massive parallelism on cached quantities.
 
-\vspace{0.2 cm}
+\vspace{0.1 cm}
 Similar to current approach in that every event is examined (no indexing), but data-fetch is shared among users.
 \end{description}
 \end{frame}
 
-\begin{frame}{Parallel scripts vs.\ GPU}
+\begin{frame}{GRID jobs vs.\ GPU queries}
+\vspace{0.25 cm}
+\small
+\begin{columns}[t]
+\column{0.5\linewidth}
+\textcolor{darkblue}{\underline{GRID jobs}}
+\begin{enumerate}
+\item Physicist Phil's job asks for a block of $p_x$ and $p_y$ from events 1000--1999.
 
+XRootD supplies them.
 
+\item Phil's C++ code selects half the events and computes $\sqrt{{p_x}^2 + {p_y}^2}$ for each. They are all saved to disk.
 
+\item At the end of the job, the output file of $\mathcal{O}(N_{\mbox{\scriptsize events}})$ is sent back to Phil.
 
+\item Physicist Phoebe's job asks for block of $p_x$, $p_y$, and $p_z$ from events 1000--1999.
+
+\textcolor{darkblue}{XRootD supplies them \mbox{all again.\hspace{-1 cm}}}
+\end{enumerate}
+
+\column{0.5\linewidth}
+\textcolor{darkblue}{\underline{GPU queries}}
+\begin{enumerate}
+\item Physicist Phil's query requires a block of $p_x$ and $p_y$.
+
+They are loaded into the GPU's global memory.
+
+\item Phil's filter and transformation have been converted into GPU kernels that operate on all events in the block at once.
+
+\item At the end of the query, only aggregate quantities are returned: e.g.\ a histogram.
+
+\item Physicist Phoebe's query requires $p_x$, $p_y$, and $p_z$.
+
+\textcolor{darkblue}{Only $p_z$ needs to be loaded into the GPU.}
+\end{enumerate}
+\end{columns}
 \end{frame}
+
+\begin{frame}{GRID jobs vs.\ GPU queries}
+\vspace{0.5 cm}
+\begin{block}{Main advantages of GPU}
+\begin{itemize}
+\item Tasks are more lightweight, less overhead in parallelization.
+\item Commonly used quantities stay in GPU-cache between user's job and the next.
+
+\vspace{0.1 cm}
+Popular data is faster to query than less popular data.
+\end{itemize}
+\end{block}
+
+\begin{block}{Disadvantages of GPU}
+\begin{itemize}
+\item Queries have to be compiled into kernels. A new language will be required (we don't want to execute unrestricted CUDA) and that language will have limited capabilities.
+\item For cache to be useful, jobs must have good data locality.
+\end{itemize}
+\end{block}
+\end{frame}
+
+\begin{frame}{Feasibility}
+\vspace{0.25 cm}
+\begin{itemize}
+\item Princeton's Tiger cluster is an example of what can be built. \textcolor{gray}{\small (But how much did it cost? I need to look that up.)}
+
+\small
+\hfill \begin{tabular}{p{0.9\linewidth}}
+50 computers \\
+4 GPUs per computer \\
+5 GB global memory per GPU (total of 1 TB cache) \\
+824 GB of RAM per CPU (total of 41 TB)
+\end{tabular}
+
+\normalsize
+\item<2-> CPU RAM to GPU global memory (for cache misses)
+\begin{itemize}
+\item cheap gaming cards: 1 GB/s \textcolor{gray}{$\to$ 30 seconds to fill {\it entire} GPU}
+\item pinned memory is 50\% faster (my tests)
+\item NVLink for supercomputers: 80 GB/s
+\item loading data for obscure queries can be concurrent with running common queries.
+\end{itemize}
+
+\item<3-> Data to CPU RAM
+\begin{itemize}
+\item mechanical hard drives: 0.2 GB/s
+\item SSDs: 0.2--1.5 GB/s
+\item network: $\sim$1--10 GB/s, but remember that jobs must have good data locality.
+\end{itemize}
+
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Data locality}
+\begin{description}
+\item[``HDFS style''] blocks of data are located on the task executors; tasks are sent to the executors with the required data.
+\item[``XRootD style''] data source and task executors are decoupled, connected by a fast network.
+\end{description}
+
+\begin{itemize}
+\item<2-> Disadvantage of HDFS style: if some datasets are much more popular than others, tasks will not be load-balanced.
+\item<3-> But failing to send tasks that require the same data to the same executor would render caching useless, so we {\it must} have HDFS style locality.
+\item<4-> Data distribution across cluster must be fine-grained.
+
+\textcolor{gray}{(Don't put all the Higgs data on one machine!)}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Data representation}
+\vspace{0.5 cm}
+Logically, data events are trees with known schema:
+\tiny
+\begin{center}
+\begin{minipage}{0.5\linewidth}
+\begin{verbatim}
+event
+  |
+  +--- primaryVertices: int
+  +--- tracks: collection of records
+  |      |
+  |      +--- pt: float
+  |      +--- hits: collection of records
+  |             |
+  |             +--- detid: int
+  |             +--- charge: float
+  |
+  +--- showers: collection of records
+         |
+         +--- et: float
+\end{verbatim}
+\end{minipage}
+\end{center}
+
+\normalsize
+Physically, each leaf in this tree must be a contiguous array of bytes. Possible ways to break it down:
+
+\vspace{0.25 cm}
+\tiny
+\begin{columns}
+\column{0.5\linewidth}
+{\bf Pointers to parents}
+
+\vspace{-0.35 cm}
+\begin{verbatim}
+primaryVertices      int     (one per event)
+tracks.eventId       int     (one per track)
+tracks.pt            float   (one per track)
+tracks.hits.trackId  int     (one per hit)
+tracks.hits.detid    int     (one per hit)
+tracks.hits.charge   float   (one per hit)
+showers.eventId      int     (one per shower)
+showers.et           float   (one per shower)
+\end{verbatim}
+
+\column{0.5\linewidth}
+{\bf Pointers to children}
+
+\vspace{-0.35 cm}
+\begin{verbatim}
+primaryVertices      int     (one per event)
+numTracks            int     (one per event)
+tracks.pt            float   (one per track)
+tracks.numHits       int     (one per track)
+tracks.hits.detid    int     (one per hit)
+tracks.hits.charge   float   (one per hit)
+numShowers           int     (one per event)
+showers.et           float   (one per shower)
+\end{verbatim}
+\end{columns}
+\end{frame}
+
+\begin{frame}{Data representation\ldots\ considerations}
+\scriptsize
+\begin{itemize}\setlength{\itemsep}{0.25 cm}
+\item All columns associated with a given event must be loadable into the same GPU, but usually only a few columns would be loaded at any given time.
+
+\item The event-level columns (e.g.\ {\tt primaryVertices}) have different lengths than the track-level columns (e.g.\ {\tt tracks.pt}). How to avoid memory fragmentation?
+
+\item Should the data be pre-formatted, avoiding CPU transformation costs when loading into GPU cache?
+
+If this isn't necessary, we can use existing XRootD mechanism to feed caches\ldots
+
+\item If pre-formatted, should we sort tracks by must popular cut variable ({\tt tracks.pt})? Knowing this would allow ``max $p_T$ with quality cuts'' queries to break after finding one candidate.
+
+\item Should we play the coarse selection, fine selection trick in the GPU database? The user doesn't have to know\ldots
+
+\item How to perform warp-locked algorithms over sets of tracks and showers, which can have different lengths in different events?
+
+Should the coarse selection pass also sort or bin events by size of the workload in the fine selection pass? This information can be known.
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Queries}
+The filters and transformations physicists want to apply are too complex for SQL or any existing declarative language. (I talked to a {\it lot} of knowledgeable people before coming to this conclusion.)
+
+\vspace{0.5 cm}
+A declarative language would allow more backend optimization, such as the two-pass filter we've been talking about. Course selections can't be automatically inferred from imperative code.
+
+\vspace{0.5 cm}
+Results would always be aggregations, served to plots or a physicist's ROOT prompt using Histogrammar.
+\end{frame}
+
+\begin{frame}{Ideas about a query language}
+\vspace{0.25 cm}
+From a user's perspective, 
+
+
+
+
+
+
+\vspace{0.25 cm}
+But the semantics should also be declarative to develop better backend optimizations.
+
+\vspace{0.25 cm}
+\begin{uncoverenv}<2->
+\textcolor{darkblue}{\bf Idea:} introduce ``higher order functions'' to select-where SQL?
+\begin{itemize}
+\item add syntax like {\tt x -> sin(x) + 3*x} to expressions
+\item add methods like the following to arrays
+\begin{itemize}
+\item {\tt \scriptsize COLLECTION.map(function1)}
+\item {\tt \scriptsize COLLECTION.reduce(function2)} {\it not} a DAF: operates only on {\it tracks within one event}.
+\item {\tt \scriptsize COLLECTION.count}
+\item {\tt \scriptsize COLLECTION.sum}
+\item {\tt \scriptsize COLLECTION.max(function1, N)} top-N subcollection.
+\item {\tt \scriptsize join(COLLECTION1, COLLECTION2)} {\it not} joining events, but {\it tracks within one event} (small).
+\item {\tt \scriptsize COLLECTION.pairs} like the above, but unique pairs of indexes.
+\end{itemize}
+\item add assignments (syntactic sugar).
+\end{itemize}
+\end{uncoverenv}
+\end{frame}
+
+\begin{frame}[fragile]{Other cases\ldots?}
+\vspace{0.5 cm}
+\textcolor{darkblue}{Common task:} match simulated particles with their reconstructed counterparts within each event.
+
+\vspace{0.25 cm}
+\begin{itemize}
+\item Might assign same reconstructed to multiple simulated:
+\end{itemize}
+\begin{lstlisting}
+simulated.map(s -> (s, reconstructed.map(r -> dist(s, r)).min))
+\end{lstlisting}
+
+\vspace{0.25 cm}
+\begin{uncoverenv}<2->
+\begin{itemize}
+\item Might assign same simulated to multiple reconstructed:
+\end{itemize}
+\begin{lstlisting}
+reconstructed.map(r -> (simulated.map(s -> dist(s, r)).min, r))
+\end{lstlisting}
+\end{uncoverenv}
+
+\vspace{0.25 cm}
+\begin{uncoverenv}<3->
+\begin{itemize}
+\item Have to introduce new built-in function to get exclusive matches:
+\end{itemize}
+\begin{lstlisting}
+bestMatch(simulated, reconstructed, (s, r) -> dist(s, r))
+greedyMatch(simulated, reconstructed, (s, r) -> dist(s, r))
+greedyMatch(reconstructed, simulated, (r, s) -> dist(s, r))
+\end{lstlisting}
+\end{uncoverenv}
+\end{frame}
+
 
 
 \end{document}
