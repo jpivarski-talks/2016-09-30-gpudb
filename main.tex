@@ -79,95 +79,61 @@
 %  \tableofcontents
 %\end{frame}
 
-\section{Introduction}
-
-\begin{frame}{Introduction}
-
-\begin{itemize}
-  \item Your introduction goes here!
-  \item Use \texttt{itemize} to organize your main points.
-\end{itemize}
-
-\vskip 1cm
-
-\begin{block}{Examples}
-Some examples of commonly used commands and features are included, to help you get started.
-\end{block}
-
-\end{frame}
-
-\section{Some \LaTeX{} Examples}
-
-\subsection{Tables and Figures}
-
-\begin{frame}{Tables and Figures}
-
-\begin{itemize}
-\item Use \texttt{tabular} for basic tables --- see Table~\ref{tab:widgets}, for example.
-\item You can upload a figure (JPEG, PNG or PDF) using the files menu. 
-\item To include it in your document, use the \texttt{includegraphics} command (see the comment below in the source code).
-\end{itemize}
-
-% Commands to include a figure:
-%\begin{figure}
-%\includegraphics[width=\textwidth]{your-figure's-file-name}
-%\caption{\label{fig:your-figure}Caption goes here.}
-%\end{figure}
-
-\begin{table}
-\centering
-\begin{tabular}{l|r}
-Item & Quantity \\\hline
-Widgets & 42 \\
-Gadgets & 13
-\end{tabular}
-\caption{\label{tab:widgets}An example table.}
-\end{table}
-
-\end{frame}
-
-\subsection{Mathematics}
-
-\begin{frame}{Readable Mathematics}
-
-Let $X_1, X_2, \ldots, X_n$ be a sequence of independent and identically distributed random variables with $\text{E}[X_i] = \mu$ and $\text{Var}[X_i] = \sigma^2 < \infty$, and let
-$$S_n = \frac{X_1 + X_2 + \cdots + X_n}{n}
-      = \frac{1}{n}\sum_{i}^{n} X_i$$
-denote their mean. Then as $n$ approaches infinity, the random variables $\sqrt{n}(S_n - \mu)$ converge in distribution to a normal $\mathcal{N}(0, \sigma^2)$.
-
-\end{frame}
-
-\subsection{Code}
-
-\begin{frame}[fragile]{Readable Code}
-
+\begin{frame}{Current physics workflow}
 \vspace{0.5 cm}
+\only<1>{\includegraphics[width=\linewidth]{workflow1.pdf}}
+\only<2->{\includegraphics[width=\linewidth]{workflow2.pdf}}
 
-Remember to mark the frame as ``fragile'' for verbatim.
+\vspace{0.25 cm}
+\begin{itemize}
+\item<3-> Event index database addresses one part of the slowness of physicist user skims at a cost of adding a layer of complexity.
+\item<4-> I am now discovering that there are much worse hotspots in the physicists' scripts.
+\item<5-> Bugs, inefficiencies in the custom code and ntuple-version control issues get in the way of physicists doing analysis.
+\end{itemize}
+\end{frame}
 
-\begin{lstlisting}[language=c, frame=single]
-auto output = std::vector<Result>();
-for (i = 0;  i < nEvents;  i++) {   // C++ code!
-    event = events(i);
-    if (condition(event))
-        continue;
-    output.push_back(calculation(event));
-}
-\end{lstlisting}
+\begin{frame}{Ideal physics workflow}
+\vspace{0.5 cm}
+\includegraphics[width=\linewidth]{workflow3.pdf}
 
-\begin{lstlisting}[language=python, frame=single]
-output = []                         # Python code!
-for event in events:
-    if condition(event):
-        continue
-    output.append(calculation(event))
-\end{lstlisting}
+\vspace{0.25 cm}
+\begin{itemize}
+\item Ideally, data should go directly from centralized dataset into plots and statistical routines.
+\item<2-> But as we've seen, physics data are too deeply structured for traditional database indexing.
+\end{itemize}
 
-\begin{lstlisting}[language=scala, frame=single]
-val output: Seq[Result] =           // Scala code!
-  events.filter(condition).map(calculation)
-\end{lstlisting}
+\vspace{1 cm}
+\end{frame}
+
+\begin{frame}{How to make that happen}
+\vspace{0.25 cm}
+\small
+\begin{description}
+\item[Parallel scripts (current):] run many jobs on the GRID, each pulls data over the network, analyzes every event, and filters, computes quantities of interest.
+
+\item[Relational database:]<2-> use pre-computed indexes over event data to avoid looking at every event in every query.
+
+\vspace{0.2 cm}
+But\ldots\ how to index over nested structures? Normal form requires expensive joins.
+
+\vspace{0.2 cm}
+Something like this was tried in the 90's with Objectivity (BaBar, CLEO, maybe others): considered a failure.
+
+\item[NoSQL databases:]<3-> many different types, but most would require expensive map-reduce jobs instead of joins.
+
+\item[GPU database:]<4-> use massive parallelism on cached quantities.
+
+\vspace{0.2 cm}
+Similar to current approach in that every event is examined (no indexing), but data-fetch is shared among users.
+\end{description}
+\end{frame}
+
+\begin{frame}{Parallel scripts vs.\ GPU}
+
+
+
 
 \end{frame}
+
 
 \end{document}
