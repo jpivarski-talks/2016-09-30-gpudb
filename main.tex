@@ -23,6 +23,7 @@
 \usepackage{tikz}
 \usepackage{listings}
 \usepackage{courier}
+\usepackage{minted}
 
 \xdefinecolor{darkblue}{rgb}{0.1,0.1,0.7}
 \xdefinecolor{dianablue}{rgb}{0.18,0.24,0.31}
@@ -329,19 +330,11 @@ Results would always be aggregations, served to plots or a physicist's ROOT prom
 
 \begin{frame}{Ideas about a query language}
 \vspace{0.25 cm}
-From a user's perspective, 
-
-
-
-
-
-
-\vspace{0.25 cm}
-But the semantics should also be declarative to develop better backend optimizations.
+Higher-order functions like {\it map, filter,} and {\it reduce} express physicists' problems well.
 
 \vspace{0.25 cm}
 \begin{uncoverenv}<2->
-\textcolor{darkblue}{\bf Idea:} introduce ``higher order functions'' to select-where SQL?
+\textcolor{darkblue}{\bf Idea:} introduce ``higher order functions'' to select-where SQL
 \begin{itemize}
 \item add syntax like {\tt x -> sin(x) + 3*x} to expressions
 \item add methods like the following to arrays
@@ -367,18 +360,22 @@ But the semantics should also be declarative to develop better backend optimizat
 \begin{itemize}
 \item Might assign same reconstructed to multiple simulated:
 \end{itemize}
-\begin{lstlisting}
+\scriptsize
+\begin{verbatim}
 simulated.map(s -> (s, reconstructed.map(r -> dist(s, r)).min))
-\end{lstlisting}
+\end{verbatim}
+\normalsize
 
 \vspace{0.25 cm}
 \begin{uncoverenv}<2->
 \begin{itemize}
 \item Might assign same simulated to multiple reconstructed:
 \end{itemize}
-\begin{lstlisting}
+\scriptsize
+\begin{verbatim}
 reconstructed.map(r -> (simulated.map(s -> dist(s, r)).min, r))
-\end{lstlisting}
+\end{verbatim}
+\normalsize
 \end{uncoverenv}
 
 \vspace{0.25 cm}
@@ -386,14 +383,39 @@ reconstructed.map(r -> (simulated.map(s -> dist(s, r)).min, r))
 \begin{itemize}
 \item Have to introduce new built-in function to get exclusive matches:
 \end{itemize}
-\begin{lstlisting}
+\scriptsize
+\begin{verbatim}
 bestMatch(simulated, reconstructed, (s, r) -> dist(s, r))
 greedyMatch(simulated, reconstructed, (s, r) -> dist(s, r))
 greedyMatch(reconstructed, simulated, (r, s) -> dist(s, r))
-\end{lstlisting}
+\end{verbatim}
+\normalsize
 \end{uncoverenv}
 \end{frame}
 
+\begin{frame}[fragile]{Example user interaction}
+\scriptsize
+\begin{minted}{python}
+from scope import db
 
+results = db.enrich("""
+    # circulate dphi
+    dphi = x, y ->
+      if   x - y > pi     then x - y - 2*pi
+      else if x - y < -pi then x - y + 2*pi
+      else                     x - y
+
+    deltaR = r, g ->
+      sqrt(dphi(r.phi - g.phi)**2 + (r.eta - g.eta)**2)
+  """)
+  .flatten("bestMatch(recojets, genjets, deltaR)")
+  .Branch(Bin(100, -10, 10, "r.pt - g.pt"),
+          Bin(100, 0, 100, "g.pt", Deviate("r.pt - g.pt")))
+
+# aggregated data are now available in PyROOT
+results(i0).plot.root("pt diff").Draw()
+results(i1).plot.root("pt diff vs gen pt").Draw()
+\end{minted}
+\end{frame}
 
 \end{document}
