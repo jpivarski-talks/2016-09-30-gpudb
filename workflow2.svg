@@ -31,7 +31,7 @@
      inkscape:document-units="px"
      inkscape:current-layer="layer1"
      showgrid="false"
-     inkscape:window-width="1225"
+     inkscape:window-width="1298"
      inkscape:window-height="1027"
      inkscape:window-x="0"
      inkscape:window-y="0"
@@ -48,7 +48,7 @@
         <dc:format>image/svg+xml</dc:format>
         <dc:type
            rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
-        <dc:title></dc:title>
+        <dc:title />
       </cc:Work>
     </rdf:RDF>
   </metadata>
@@ -202,11 +202,11 @@
          sodipodi:role="line"
          id="tspan3777"
          x="-67.008652"
-         y="612.80267">• Optimized by professionals</tspan><tspan
+         y="612.80267">• Highly tuned, maintainable, optimized</tspan><tspan
          sodipodi:role="line"
          x="-67.008652"
          y="652.80267"
-         id="tspan3779">• Rarely repeated</tspan></text>
+         id="tspan3779">• Rarely repeated (~several times)</tspan></text>
     <text
        sodipodi:linespacing="125%"
        id="text3781"

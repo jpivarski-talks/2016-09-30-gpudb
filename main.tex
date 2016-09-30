@@ -89,7 +89,7 @@
 \begin{itemize}
 \item<3-> Event index database addresses one part of the slowness of physicist user skims at a cost of adding a layer of complexity.
 \item<4-> I am now discovering that there are much worse hotspots in the physicists' scripts.
-\item<5-> Bugs, inefficiencies in the custom code and ntuple-version control issues get in the way of physicists doing analysis.
+\item<5-> Bugs and inefficiencies in the custom code and ntuple-version control issues get in the way of physicists doing analysis.
 \end{itemize}
 \end{frame}
 
@@ -120,7 +120,7 @@ But\ldots\ how to index over nested structures? Normal form requires expensive j
 \vspace{0.1 cm}
 Something like this was tried in the 90's with Objectivity (BaBar, CLEO, maybe others): considered a failure.
 
-\item[NoSQL databases:]<3-> many different types, but most would require even move expensive map-reduce jobs instead of joins.
+\item[NoSQL databases:]<3-> many different types, but most would require even more expensive map-reduce jobs instead of joins.
 
 \item[GPU database:]<4-> use massive parallelism on cached quantities.
 
@@ -142,9 +142,9 @@ XRootD supplies them.
 
 \item Phil's C++ code selects half the events and computes $\sqrt{{p_x}^2 + {p_y}^2}$ for each. They are all saved to disk.
 
-\item At the end of the job, the output file of $\mathcal{O}(N_{\mbox{\scriptsize events}})$ is sent back to Phil.
+\item At the end of the job, the output file of $\mathcal{O}(N_{\mbox{\scriptsize events}})$ rows is sent back to Phil.
 
-\item Physicist Phoebe's job asks for block of $p_x$, $p_y$, and $p_z$ from events 1000--1999.
+\item Physicist Phoebe's job asks for a block of $p_x$, $p_y$, and $p_z$ from events 1000--1999.
 
 \textcolor{darkblue}{XRootD supplies them \mbox{all again.\hspace{-1 cm}}}
 \end{enumerate}
@@ -162,7 +162,7 @@ They are loaded into the GPU's global memory.
 
 \item Physicist Phoebe's query requires $p_x$, $p_y$, and $p_z$.
 
-\textcolor{darkblue}{Only $p_z$ needs to be loaded into the GPU.}
+\textcolor{darkblue}{Only loads $p_z$ into the GPU; \\ $p_x$ and $p_y$ are already there.}
 \end{enumerate}
 \end{columns}
 \end{frame}
@@ -175,7 +175,7 @@ They are loaded into the GPU's global memory.
 \item Commonly used quantities stay in GPU-cache between user's job and the next.
 
 \vspace{0.1 cm}
-Popular data is faster to query than less popular data.
+Popular data are faster to query than less popular data.
 \end{itemize}
 \end{block}
 
@@ -196,7 +196,7 @@ Popular data is faster to query than less popular data.
 \hfill \begin{tabular}{p{0.9\linewidth}}
 50 computers \\
 4 GPUs per computer \\
-5 GB global memory per GPU (total of 1 TB cache) \\
+5 GB global memory per GPU (total of 1 TB GPU cache) \\
 824 GB of RAM per CPU (total of 41 TB)
 \end{tabular}
 
@@ -221,13 +221,13 @@ Popular data is faster to query than less popular data.
 
 \begin{frame}{Data locality}
 \begin{description}
-\item[``HDFS style''] blocks of data are located on the task executors; tasks are sent to the executors with the required data.
-\item[``XRootD style''] data source and task executors are decoupled, connected by a fast network.
+\item[``HDFS style''] blocks of data are located on the task executors; tasks go to the executors that have the required data.
+\item[``XRootD style''] data source and task executors are distinct, connected by fast network. Tasks go to any executor.
 \end{description}
 
 \begin{itemize}
 \item<2-> Disadvantage of HDFS style: if some datasets are much more popular than others, tasks will not be load-balanced.
-\item<3-> But failing to send tasks that require the same data to the same executor would render caching useless, so we {\it must} have HDFS style locality.
+\item<3-> But failing to send tasks that require the same data to the same executor would render caching useless, so we {\it must} have HDFS style locality. \textcolor{gray}{(This system has ``Spark style'' caching.)}
 \item<4-> Data distribution across cluster must be fine-grained.
 
 \textcolor{gray}{(Don't put all the Higgs data on one machine!)}
@@ -235,8 +235,9 @@ Popular data is faster to query than less popular data.
 \end{frame}
 
 \begin{frame}[fragile]{Data representation}
-\vspace{0.5 cm}
-Logically, data events are trees with known schema:
+\vspace{0.45 cm}
+\small
+\hspace{-0.35 cm}Logically, data events are trees with known schema:
 \tiny
 \begin{center}
 \begin{minipage}{0.5\linewidth}
@@ -247,10 +248,11 @@ event
   +--- tracks: collection of records
   |      |
   |      +--- pt: float
+  |      +--- theta: float
   |      +--- hits: collection of records
   |             |
-  |             +--- detid: int
   |             +--- charge: float
+  |             +--- time: float
   |
   +--- showers: collection of records
          |
@@ -259,45 +261,54 @@ event
 \end{minipage}
 \end{center}
 
-\normalsize
-Physically, each leaf in this tree must be a contiguous array of bytes. Possible ways to break it down:
+\small
+\hspace{-0.35 cm}Physically, each leaf should be an array of bytes. Ways to break it down:
 
 \vspace{0.25 cm}
 \tiny
-\begin{columns}
-\column{0.5\linewidth}
-{\bf Pointers to parents}
-
-\vspace{-0.35 cm}
-\begin{verbatim}
-primaryVertices      int     (one per event)
-tracks.eventId       int     (one per track)
-tracks.pt            float   (one per track)
-tracks.hits.trackId  int     (one per hit)
-tracks.hits.detid    int     (one per hit)
-tracks.hits.charge   float   (one per hit)
-showers.eventId      int     (one per shower)
-showers.et           float   (one per shower)
-\end{verbatim}
-
+\begin{columns}[t]
 \column{0.5\linewidth}
 {\bf Pointers to children}
 
 \vspace{-0.35 cm}
 \begin{verbatim}
 primaryVertices      int     (one per event)
+firstTrackId         long    (one per event)
 numTracks            int     (one per event)
 tracks.pt            float   (one per track)
+tracks.theta         float   (one per track)
+tracks.firstHitId    long    (one per track)
 tracks.numHits       int     (one per track)
-tracks.hits.detid    int     (one per hit)
 tracks.hits.charge   float   (one per hit)
+tracks.hits.time     float   (one per hit)
+firstShowerId        long    (one per event)
 numShowers           int     (one per event)
+showers.et           float   (one per shower)
+\end{verbatim}
+
+\column{0.5\linewidth}
+{\bf Pointers to parents} (more data in fewer columns)
+
+\vspace{-0.35 cm}
+\begin{verbatim}
+primaryVertices      int     (one per event)
+
+tracks.eventId       long    (one per track)
+tracks.pt            float   (one per track)
+tracks.theta         float   (one per track)
+
+tracks.hits.trackId  long    (one per hit)
+tracks.hits.charge   float   (one per hit)
+tracks.hits.time     float   (one per hit)
+
+showers.eventId      long    (one per shower)
 showers.et           float   (one per shower)
 \end{verbatim}
 \end{columns}
 \end{frame}
 
 \begin{frame}{Data representation\ldots\ considerations}
+\vspace{0.5 cm}
 \scriptsize
 \begin{itemize}\setlength{\itemsep}{0.25 cm}
 \item All columns associated with a given event must be loadable into the same GPU, but usually only a few columns would be loaded at any given time.
@@ -308,7 +319,7 @@ showers.et           float   (one per shower)
 
 If this isn't necessary, we can use existing XRootD mechanism to feed caches\ldots
 
-\item If pre-formatted, should we sort tracks by must popular cut variable ({\tt tracks.pt})? Knowing this would allow ``max $p_T$ with quality cuts'' queries to break after finding one candidate.
+\item If pre-formatted, should we sort tracks by must popular cut variable ({\tt tracks.pt})? Knowing this would allow ``max $p_T$ with quality cuts'' queries to short-circuit after finding one candidate.
 
 \item Should we play the coarse selection, fine selection trick in the GPU database? The user doesn't have to know\ldots
 
@@ -318,32 +329,121 @@ Should the coarse selection pass also sort or bin events by size of the workload
 \end{itemize}
 \end{frame}
 
-\begin{frame}{Queries}
+\begin{frame}{Query language}
+\small
+\vspace{0.5 cm}
 The filters and transformations physicists want to apply are too complex for SQL or any existing declarative language. (I talked to a {\it lot} of knowledgeable people before coming to this conclusion.)
+\begin{itemize}
+\item StackOverflow
+\item Author of Spark's Catalyst optimizer at Databricks
+\item Authors of Pandas and Parquet projects
+\item Ad-hoc session at StrangeLoop, $\sim$30 language experts
+\end{itemize}
 
 \vspace{0.5 cm}
-A declarative language would allow more backend optimization, such as the two-pass filter we've been talking about. Course selections can't be automatically inferred from imperative code.
+\uncover<2->{A declarative language would allow more backend optimization, such as the two-pass filter we've been talking about. Course selections can't be automatically inferred from imperative code.}
 
 \vspace{0.5 cm}
-Results would always be aggregations, served to plots or a physicist's ROOT prompt using Histogrammar.
+\uncover<3->{Results would always be aggregations, served to plots or a physicist's ROOT client using Histogrammar.}
 \end{frame}
+
+\begin{frame}[fragile]{Scala/Spark inspiration}
+\vspace{0.35 cm}
+\small
+\textcolor{darkblue}{Example query:}
+
+\begin{onlyenv}<1>
+``Pt of the track with the most hits that has theta between \mbox{$-2.4$ and $2.4$.''\hspace{-1 cm}}
+\end{onlyenv}
+\begin{onlyenv}<2>
+``Average charge of all hits with time less than 25 on all tracks with pt greater than 10.''
+\end{onlyenv}
+\begin{onlyenv}<3>
+``Weighted average theta of the two tracks with highest pt.''
+\end{onlyenv}
+
+\begin{center}
+\begin{minipage}{0.5\linewidth}
+{\tiny
+\begin{verbatim}
+event
+  |
+  +--- primaryVertices: int
+  +--- tracks: collection of records
+  |      |
+  |      +--- pt: float
+  |      +--- theta: float
+  |      +--- hits: collection of records
+  |             |
+  |             +--- charge: float
+  |             +--- time: float
+  |
+  +--- showers: collection of records
+         |
+         +--- et: float
+\end{verbatim}}
+\end{minipage}
+\end{center}
+
+\textcolor{darkblue}{Expression in Scala/Spark:}
+
+\vspace{-0.2 cm}
+\scriptsize
+\begin{onlyenv}<1>
+\begin{minted}{scala}
+{event => event.tracks                      // get tracks
+               .filter(abs(_.theta) < 2.4)  // theta range
+               .maxBy(_.hits.size)          // most hits
+               .pt                          // return momentum
+}
+\end{minted}
+\end{onlyenv}
+\begin{onlyenv}<2>
+\begin{minted}{scala}
+{event => mean(
+            event.tracks                    // get tracks
+                 .filter(_.pt > 10)         // in momentum range
+                 .flatMap(_.hits)           // explode to hits
+                 .filter(_.time < 25)       // in time range
+                 .map(_.charge)             // return charges
+              )}                            // to mean function
+\end{minted}
+\end{onlyenv}
+\begin{onlyenv}<3>
+\begin{minted}{scala}
+{event => val List(one, two) =              // unpack and assign
+              event.tracks                  // get tracks
+                   .sortBy(_.pt)            // sort by momentum
+                   .take(2)                 // take two
+          // now compute the weighted mean of the two tracks
+          (one.theta*one.pt + two.theta*two.pt) /
+              (one.pt + two.pt)
+}
+\end{minted}
+\end{onlyenv}
+\end{frame}
+
+
+
+
+
 
 \begin{frame}{Ideas about a query language}
 \vspace{0.25 cm}
-Higher-order functions like {\it map, filter,} and {\it reduce} express physicists' problems well.
+Higher-order functions like {\it map, filter,} and {\it reduce} are good at dealing with nested data.
 
 \vspace{0.25 cm}
 \begin{uncoverenv}<2->
 \textcolor{darkblue}{\bf Idea:} introduce ``higher order functions'' to select-where SQL
 \begin{itemize}
-\item add syntax like {\tt x -> sin(x) + 3*x} to expressions
+\item add syntax like ``{\tt x -> sin(x) + 3*x}'' to expressions
 \item add methods like the following to arrays
 \begin{itemize}
 \item {\tt \scriptsize COLLECTION.map(function1)}
 \item {\tt \scriptsize COLLECTION.reduce(function2)} {\it not} a DAF: operates only on {\it tracks within one event}.
 \item {\tt \scriptsize COLLECTION.count}
 \item {\tt \scriptsize COLLECTION.sum}
-\item {\tt \scriptsize COLLECTION.max(function1, N)} top-N subcollection.
+\item {\tt \scriptsize COLLECTION.max(function1)}
 \item {\tt \scriptsize join(COLLECTION1, COLLECTION2)} {\it not} joining events, but {\it tracks within one event} (small).
 \item {\tt \scriptsize COLLECTION.pairs} like the above, but unique pairs of indexes.
 \end{itemize}
