@@ -140,13 +140,13 @@ Similar to current approach in that every event is examined (no indexing), but d
 
 XRootD supplies them.
 
-\item Phil's C++ code selects half the events and computes $\sqrt{{p_x}^2 + {p_y}^2}$ for each. They are all saved to disk.
+\item Phil's C++ code selects half the events and computes $\sqrt{{p_x}^2 + {p_y}^2}$ for each. They are saved to local disk.
 
 \item At the end of the job, the output file of $\mathcal{O}(N_{\mbox{\scriptsize events}})$ rows is sent back to Phil.
 
 \item Physicist Phoebe's job asks for a block of $p_x$, $p_y$, and $p_z$ from events 1000--1999.
 
-\textcolor{darkblue}{XRootD supplies them \mbox{all again.\hspace{-1 cm}}}
+\textcolor{darkblue}{XRootD supplies them \mbox{{\it all} again.\hspace{-1 cm}}}
 \end{enumerate}
 
 \column{0.5\linewidth}
@@ -334,7 +334,7 @@ Should the coarse selection pass also sort or bin events by size of the workload
 \vspace{0.5 cm}
 The filters and transformations physicists want to apply are too complex for SQL or any existing declarative language. (I talked to a {\it lot} of knowledgeable people before coming to this conclusion.)
 \begin{itemize}
-\item StackOverflow
+\item StackOverflow \textcolor{blue}{\scriptsize \url{http://stackoverflow.com/q/38831961/1623645}}
 \item Author of Spark's Catalyst optimizer at Databricks
 \item Authors of Pandas and Parquet projects
 \item Ad-hoc session at StrangeLoop, $\sim$30 language experts
@@ -494,28 +494,48 @@ greedyMatch(reconstructed, simulated, (r, s) -> dist(s, r))
 \end{frame}
 
 \begin{frame}[fragile]{Example user interaction}
+\vspace{0.25 cm}
 \scriptsize
 \begin{minted}{python}
-from scope import db
+from terascope import dataset
 
-results = db.enrich("""
-    # circulate dphi
+# Query language (femtocode) appears in short, quoted segments.
+results = dataset["ttbar-mc"].enrich("""
+    # define function to calculate dphi
     dphi = x, y ->
       if   x - y > pi     then x - y - 2*pi
       else if x - y < -pi then x - y + 2*pi
       else                     x - y
 
+    # define Euclidean distance in dphi and deta
     deltaR = r, g ->
       sqrt(dphi(r.phi - g.phi)**2 + (r.eta - g.eta)**2)
-  """)
-  .flatten("bestMatch(recojets, genjets, deltaR)")
+  """) \
+  # Explode data table by best reco/gen jet matches in deltaR.
+  .flatMap("bestMatch(recojets, genjets, deltaR)") \
+  # Then use Histogrammar to define aggregations.
   .Branch(Bin(100, -10, 10, "r.pt - g.pt"),
           Bin(100, 0, 100, "g.pt", Deviate("r.pt - g.pt")))
 
-# aggregated data are now available in PyROOT
+# Aggregated data are now available to PyROOT and plotting.
 results(i0).plot.root("pt diff").Draw()
 results(i1).plot.root("pt diff vs gen pt").Draw()
 \end{minted}
+\end{frame}
+
+\begin{frame}{Working titles}
+\textcolor{darkblue}{Terascope}: the GPU database
+
+\textcolor{gray}{(TB scale, can be used as a verb, DNS/PyPI available.)}
+
+\vspace{0.5 cm}
+\textcolor{darkblue}{Femtocode}: the query language, a tiny language
+
+\vspace{0.1 cm}
+\textcolor{gray}{(``femto-'' is sometimes swapped for ``fermi-'', as in ``fermimeter.'')}
+
+\vspace{0.5 cm}
+\textcolor{darkblue}{Histogrammar}: aggregation \mbox{language, \small \textcolor{blue}{\url{http://histogrammar.org}}\hspace{-2 cm}}
 \end{frame}
 
 \end{document}
