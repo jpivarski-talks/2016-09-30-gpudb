@@ -415,29 +415,23 @@ event
               event.tracks                  // get tracks
                    .sortBy(_.pt)            // sort by momentum
                    .take(2)                 // take two
-          // now compute the weighted mean of the two tracks
-          (one.theta*one.pt + two.theta*two.pt) /
-              (one.pt + two.pt)
+          // now compute the mean of the two tracks
+          (one.theta + two.theta) / 2.0
 }
 \end{minted}
 \end{onlyenv}
 \end{frame}
 
-
-
-
-
-
 \begin{frame}{Ideas about a query language}
 \vspace{0.25 cm}
-Higher-order functions like {\it map, filter,} and {\it reduce} are good at dealing with nested data.
+Higher-order functions like {\it map, filter,} and {\it reduce} are good at dealing with nested data, but Scala is not declarative.
 
 \vspace{0.25 cm}
 \begin{uncoverenv}<2->
-\textcolor{darkblue}{\bf Idea:} introduce ``higher order functions'' to select-where SQL
+\textcolor{darkblue}{\bf Idea:} add ``higher order functions'' to \mbox{SELECT-WHERE-only SQL\hspace{-1 cm}}
 \begin{itemize}
 \item add syntax like ``{\tt x -> sin(x) + 3*x}'' to expressions
-\item add methods like the following to arrays
+\item add methods like the following to arrays:
 \begin{itemize}
 \item {\tt \scriptsize COLLECTION.map(function1)}
 \item {\tt \scriptsize COLLECTION.reduce(function2)} {\it not} a DAF: operates only on {\it tracks within one event}.
@@ -526,7 +520,7 @@ results(i1).plot.root("pt diff vs gen pt").Draw()
 \begin{frame}{Working titles}
 \textcolor{darkblue}{Terascope}: the GPU database
 
-\textcolor{gray}{(TB scale, can be used as a verb, DNS/PyPI available.)}
+\textcolor{gray}{(terabyte scale, can be used as a verb, DNS/PyPI available.)}
 
 \vspace{0.5 cm}
 \textcolor{darkblue}{Femtocode}: the query language, a tiny language
